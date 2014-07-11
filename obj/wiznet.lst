@@ -1,0 +1,170 @@
+   1              		.syntax unified
+   2              		.cpu cortex-m4
+   3              		.eabi_attribute 27, 3
+   4              		.fpu fpv4-sp-d16
+   5              		.eabi_attribute 20, 1
+   6              		.eabi_attribute 21, 1
+   7              		.eabi_attribute 23, 3
+   8              		.eabi_attribute 24, 1
+   9              		.eabi_attribute 25, 1
+  10              		.eabi_attribute 26, 1
+  11              		.eabi_attribute 30, 6
+  12              		.eabi_attribute 34, 1
+  13              		.eabi_attribute 18, 4
+  14              		.thumb
+  15              		.file	"wiznet.c"
+  16              		.text
+  17              	.Ltext0:
+  18              		.cfi_sections	.debug_frame
+  19              		.section	.rodata.revision,"a",%progbits
+  20              		.align	2
+  23              	revision:
+  24 0000 2449643A 		.ascii	"$Id: wiznet.c 6548 2014-01-16 14:09:04Z svn $\000"
+  24      2077697A 
+  24      6E65742E 
+  24      63203635 
+  24      34382032 
+  25 002e 0000     		.section	.rodata.broadcast_address,"a",%progbits
+  26              		.align	2
+  29              	broadcast_address:
+  30 0000 FF       		.byte	-1
+  31 0001 FF       		.byte	-1
+  32 0002 FF       		.byte	-1
+  33 0003 FF       		.byte	-1
+  34              		.section	.rodata.zero_address,"a",%progbits
+  35              		.align	2
+  38              	zero_address:
+  39 0000 00000000 		.space	4
+  40              		.global	wiznet_delaycounter
+  41              		.section	.bss.wiznet_delaycounter,"aw",%nobits
+  42              		.align	2
+  45              	wiznet_delaycounter:
+  46 0000 00000000 		.space	4
+  47              		.section	.text.wiznet_tick,"ax",%progbits
+  48              		.align	2
+  49              		.global	wiznet_tick
+  50              		.thumb
+  51              		.thumb_func
+  53              	wiznet_tick:
+  54              	.LFB110:
+  55              		.file 1 "App/STM32F4-Discovery/wiznet.c"
+   1:App/STM32F4-Discovery/wiznet.c **** /* WizNet Driver Functions */
+   2:App/STM32F4-Discovery/wiznet.c **** 
+   3:App/STM32F4-Discovery/wiznet.c **** // $Id: wiznet.c 6548 2014-01-16 14:09:04Z svn $
+   4:App/STM32F4-Discovery/wiznet.c **** 
+   5:App/STM32F4-Discovery/wiznet.c **** // Copyright (C)2013-2014, Philip Munts, President, Munts AM Corp.
+   6:App/STM32F4-Discovery/wiznet.c **** // All rights reserved.
+   7:App/STM32F4-Discovery/wiznet.c **** //
+   8:App/STM32F4-Discovery/wiznet.c **** // Redistribution and use in source and binary forms, with or without
+   9:App/STM32F4-Discovery/wiznet.c **** // modification, are permitted provided that the following conditions are met:
+  10:App/STM32F4-Discovery/wiznet.c **** //
+  11:App/STM32F4-Discovery/wiznet.c **** // * Redistributions of source code must retain the above copyright notice,
+  12:App/STM32F4-Discovery/wiznet.c **** //   this list of conditions and the following disclaimer.
+  13:App/STM32F4-Discovery/wiznet.c **** //
+  14:App/STM32F4-Discovery/wiznet.c **** // THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+  15:App/STM32F4-Discovery/wiznet.c **** // AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+  16:App/STM32F4-Discovery/wiznet.c **** // IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+  17:App/STM32F4-Discovery/wiznet.c **** // ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+  18:App/STM32F4-Discovery/wiznet.c **** // LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+  19:App/STM32F4-Discovery/wiznet.c **** // CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+  20:App/STM32F4-Discovery/wiznet.c **** // SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+  21:App/STM32F4-Discovery/wiznet.c **** // INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+  22:App/STM32F4-Discovery/wiznet.c **** // CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+  23:App/STM32F4-Discovery/wiznet.c **** // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+  24:App/STM32F4-Discovery/wiznet.c **** // POSSIBILITY OF SUCH DAMAGE.
+  25:App/STM32F4-Discovery/wiznet.c **** 
+  26:App/STM32F4-Discovery/wiznet.c **** static const char revision[] = "$Id: wiznet.c 6548 2014-01-16 14:09:04Z svn $";
+  27:App/STM32F4-Discovery/wiznet.c **** 
+  28:App/STM32F4-Discovery/wiznet.c **** //#include <arm.h>
+  29:App/STM32F4-Discovery/wiznet.c **** #include "FreeRTOS.h"
+  30:App/STM32F4-Discovery/wiznet.c **** #include <math.h>
+  31:App/STM32F4-Discovery/wiznet.c **** #include <stdio.h>
+  32:App/STM32F4-Discovery/wiznet.c **** #include <stdlib.h>
+  33:App/STM32F4-Discovery/wiznet.c **** #include <string.h>
+  34:App/STM32F4-Discovery/wiznet.c **** #include <wiznet.h>
+  35:App/STM32F4-Discovery/wiznet.c **** 
+  36:App/STM32F4-Discovery/wiznet.c **** typedef struct
+  37:App/STM32F4-Discovery/wiznet.c **** {
+  38:App/STM32F4-Discovery/wiznet.c ****   uint8_t op;
+  39:App/STM32F4-Discovery/wiznet.c ****   uint8_t htype;
+  40:App/STM32F4-Discovery/wiznet.c ****   uint8_t hlen;
+  41:App/STM32F4-Discovery/wiznet.c ****   uint8_t hops;
+  42:App/STM32F4-Discovery/wiznet.c ****   uint32_t xid;
+  43:App/STM32F4-Discovery/wiznet.c ****   uint16_t secs;
+  44:App/STM32F4-Discovery/wiznet.c ****   uint16_t flags;
+  45:App/STM32F4-Discovery/wiznet.c ****   ipv4address_t ciaddr;
+  46:App/STM32F4-Discovery/wiznet.c ****   ipv4address_t yiaddr;
+  47:App/STM32F4-Discovery/wiznet.c ****   ipv4address_t siaddr;
+  48:App/STM32F4-Discovery/wiznet.c ****   ipv4address_t giaddr;
+  49:App/STM32F4-Discovery/wiznet.c ****   uint8_t chaddr[16];
+  50:App/STM32F4-Discovery/wiznet.c ****   char sname[64];
+  51:App/STM32F4-Discovery/wiznet.c ****   char file[128];
+  52:App/STM32F4-Discovery/wiznet.c ****   uint8_t vend[64];
+  53:App/STM32F4-Discovery/wiznet.c **** } __attribute__((packed)) bootp_message_t;
+  54:App/STM32F4-Discovery/wiznet.c **** 
+  55:App/STM32F4-Discovery/wiznet.c **** static const ipv4address_t broadcast_address = { 255, 255, 255, 255 };
+  56:App/STM32F4-Discovery/wiznet.c **** static const ipv4address_t zero_address	= { 0, 0, 0, 0 };
+  57:App/STM32F4-Discovery/wiznet.c **** 
+  58:App/STM32F4-Discovery/wiznet.c **** volatile uint32_t wiznet_delaycounter = 0;
+  59:App/STM32F4-Discovery/wiznet.c **** 
+  60:App/STM32F4-Discovery/wiznet.c **** void wiznet_tick(void)
+  61:App/STM32F4-Discovery/wiznet.c **** {
+  56              		.loc 1 61 0
+  57              		.cfi_startproc
+  58              		@ args = 0, pretend = 0, frame = 0
+  59              		@ frame_needed = 1, uses_anonymous_args = 0
+  60              		@ link register save eliminated.
+  61 0000 80B4     		push	{r7}
+  62              	.LCFI0:
+  63              		.cfi_def_cfa_offset 4
+  64              		.cfi_offset 7, -4
+  65 0002 00AF     		add	r7, sp, #0
+  66              	.LCFI1:
+  67              		.cfi_def_cfa_register 7
+  62:App/STM32F4-Discovery/wiznet.c ****   if (wiznet_delaycounter)
+  68              		.loc 1 62 0
+  69 0004 064B     		ldr	r3, .L3
+  70 0006 1B68     		ldr	r3, [r3]
+  71 0008 002B     		cmp	r3, #0
+  72 000a 04D0     		beq	.L1
+  63:App/STM32F4-Discovery/wiznet.c ****     wiznet_delaycounter--;
+  73              		.loc 1 63 0
+  74 000c 044B     		ldr	r3, .L3
+  75 000e 1B68     		ldr	r3, [r3]
+  76 0010 5A1E     		subs	r2, r3, #1
+  77 0012 034B     		ldr	r3, .L3
+  78 0014 1A60     		str	r2, [r3]
+  79              	.L1:
+  64:App/STM32F4-Discovery/wiznet.c **** }
+  80              		.loc 1 64 0
+  81 0016 BD46     		mov	sp, r7
+  82              		@ sp needed
+  83 0018 5DF8047B 		ldr	r7, [sp], #4
+  84 001c 7047     		bx	lr
+  85              	.L4:
+  86 001e 00BF     		.align	2
+  87              	.L3:
+  88 0020 00000000 		.word	wiznet_delaycounter
+  89              		.cfi_endproc
+  90              	.LFE110:
+  92              		.text
+  93              	.Letext0:
+  94              		.file 2 "/Users/maticknap/Downloads/gcc-arm-none-eabi-4_8-2014q2/arm-none-eabi/include/machine/_de
+  95              		.file 3 "/Users/maticknap/Downloads/gcc-arm-none-eabi-4_8-2014q2/arm-none-eabi/include/stdint.h"
+  96              		.file 4 "App/STM32F4-Discovery/Libraries/CMSIS/Include/core_cm4.h"
+DEFINED SYMBOLS
+                            *ABS*:0000000000000000 wiznet.c
+/var/folders/55/hyqmw0c94z570kz3rqrpw4jc0000gn/T//cc4lrxxb.s:20     .rodata.revision:0000000000000000 $d
+/var/folders/55/hyqmw0c94z570kz3rqrpw4jc0000gn/T//cc4lrxxb.s:23     .rodata.revision:0000000000000000 revision
+/var/folders/55/hyqmw0c94z570kz3rqrpw4jc0000gn/T//cc4lrxxb.s:26     .rodata.broadcast_address:0000000000000000 $d
+/var/folders/55/hyqmw0c94z570kz3rqrpw4jc0000gn/T//cc4lrxxb.s:29     .rodata.broadcast_address:0000000000000000 broadcast_address
+/var/folders/55/hyqmw0c94z570kz3rqrpw4jc0000gn/T//cc4lrxxb.s:35     .rodata.zero_address:0000000000000000 $d
+/var/folders/55/hyqmw0c94z570kz3rqrpw4jc0000gn/T//cc4lrxxb.s:38     .rodata.zero_address:0000000000000000 zero_address
+/var/folders/55/hyqmw0c94z570kz3rqrpw4jc0000gn/T//cc4lrxxb.s:45     .bss.wiznet_delaycounter:0000000000000000 wiznet_delaycounter
+/var/folders/55/hyqmw0c94z570kz3rqrpw4jc0000gn/T//cc4lrxxb.s:42     .bss.wiznet_delaycounter:0000000000000000 $d
+/var/folders/55/hyqmw0c94z570kz3rqrpw4jc0000gn/T//cc4lrxxb.s:48     .text.wiznet_tick:0000000000000000 $t
+/var/folders/55/hyqmw0c94z570kz3rqrpw4jc0000gn/T//cc4lrxxb.s:53     .text.wiznet_tick:0000000000000000 wiznet_tick
+/var/folders/55/hyqmw0c94z570kz3rqrpw4jc0000gn/T//cc4lrxxb.s:88     .text.wiznet_tick:0000000000000020 $d
+                     .debug_frame:0000000000000010 $d
+
+NO UNDEFINED SYMBOLS
